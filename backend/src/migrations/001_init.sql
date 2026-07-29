@@ -1,4 +1,17 @@
--- 안내: 이 파일은 backend/src/migrations/001_init.sql로 이전되었으며, 향후 스키마 변경은 backend/src/migrations/에서 관리한다.
+-- =========================================================
+-- 마이그레이션: 001_init
+-- 실행 순서: 1 (최초 실행, 신규 환경 구성 시 가장 먼저 적용)
+-- 대상 버전: PostgreSQL 17
+-- 원본 출처: database/schema.sql (DB-2에서 실제 실행 및 검증 완료된 DDL을 그대로 이전)
+-- 포함 내용 요약:
+--   - users / categories / todos 3개 테이블 생성
+--   - CHECK 제약(todos.start_date <= end_date, 도메인 규칙 3)
+--   - UNIQUE 제약(users.email, categories(owner_id, name))
+--   - FK 제약(categories/todos → users ON DELETE CASCADE, todos → categories ON DELETE RESTRICT)
+--   - 목록 조회(FR-8) 성능을 위한 인덱스(owner_id, category_id, owner_id+is_completed+end_date)
+-- 참고: 이 파일의 내용은 database/schema.sql과 완전히 동일하며, 향후 스키마 변경은
+--       이 backend/src/migrations/ 디렉토리에서 새 순번 파일(예: 002_xxx.sql)로 관리한다.
+-- =========================================================
 
 -- TodoList 데이터베이스 스키마
 -- 참조: docs/6-erd.md, docs/1-domain-definition.md, docs/2-PRD.md

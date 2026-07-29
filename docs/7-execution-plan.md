@@ -49,10 +49,10 @@ FE-1 → FE-2 → FE-3 → (FE-4 / FE-5 / FE-6 병행) → FE-7 → FE-9
 **의존성**: 없음 (최초 착수 가능)
 
 **완료 조건**
-- [ ] PostgreSQL 17 서버가 기동 중이며 `psql`로 접속이 성공한다.
-- [ ] TodoList 전용 데이터베이스와 전용 접속 계정이 생성되어 있다.
-- [ ] `pgcrypto` 확장(`gen_random_uuid()`) 활성화 권한을 확인했다.
-- [ ] `DATABASE_URL` 등 접속정보 키 목록이 확정되어 백엔드 `.env.example`에 전달 가능하다.
+- [x] PostgreSQL 17 서버가 기동 중이며 접속이 성공한다 (`psql` CLI 미설치 환경이므로 `postgresql-mcp` 도구의 `pg_debug_database(issue=connection)`로 동등 검증, status: ok).
+- [x] TodoList 전용 데이터베이스(`todolist_dev`)와 전용 접속 계정(`todolist_app`)이 생성되어 있다.
+- [x] `pgcrypto` 확장(`gen_random_uuid()`) 활성화 권한을 확인했다 (`todolist_dev`에 확장 생성 및 `gen_random_uuid()` 기반 PK 정상 동작 확인).
+- [x] `DATABASE_URL` 등 접속정보 키 목록이 확정되어 백엔드 `.env.example`에 전달 가능하다 (`backend/.env`, `backend/.env.example`에 `POSTGRES_CONNECTION_STRING`/`PORT`/`JWT_SECRET` 반영).
 
 ### DB-2. database/schema.sql 실행 및 테이블/제약조건/인덱스 검증
 
@@ -61,12 +61,12 @@ FE-1 → FE-2 → FE-3 → (FE-4 / FE-5 / FE-6 병행) → FE-7 → FE-9
 
 **의존성**: DB-1 완료
 
-**완료 조건**
-- [ ] `psql -f database/schema.sql` 실행이 오류 없이 완료되고 3개 테이블 생성을 확인했다.
-- [ ] FK/CHECK/NOT NULL 제약이 스키마와 일치함을 `\d` 명령으로 확인했다.
-- [ ] `end_date < start_date` INSERT가 거부됨(도메인 규칙 3)을 확인했다.
-- [ ] 동일 `owner_id`+동일 `name` 카테고리 중복 INSERT가 unique 위반으로 거부됨을 확인했다.
-- [ ] `users` 삭제 시 CASCADE, `categories` 삭제 시(소속 할일 있으면) RESTRICT 동작을 확인했다.
+**완료 조건** (검증: [`database/tests/db-1-to-5-verification.md`](../database/tests/db-1-to-5-verification.md) TC-DB2-1~5)
+- [x] `database/schema.sql` 실행이 오류 없이 완료되고 3개 테이블 생성을 확인했다 (`todolist_dev`에 적용, TC-DB2-1).
+- [x] FK/CHECK/NOT NULL 제약이 스키마와 일치함을 확인했다 (`information_schema` 조회, TC-DB2-2).
+- [x] `end_date < start_date` INSERT가 거부됨(도메인 규칙 3)을 확인했다 (`chk_todos_date_range` 위반, 동일 날짜는 정상 저장 확인, TC-DB2-3).
+- [x] 동일 `owner_id`+동일 `name` 카테고리 중복 INSERT가 unique 위반으로 거부됨을 확인했다 (`idx_categories_owner_name`, TC-DB2-4).
+- [x] `users` 삭제 시 CASCADE, `categories` 삭제 시(소속 할일 있으면) RESTRICT 동작을 확인했다 (TC-DB2-5).
 
 ### DB-3. 마이그레이션 파일 명명 규칙 확립 및 초기 마이그레이션 분리
 
@@ -75,11 +75,11 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: DB-2 완료
 
-**완료 조건**
-- [ ] `001_init.sql`(전체 스키마)과 필요 시 `002_add_index.sql`로 분리되어 있다.
-- [ ] 각 파일 상단에 실행 순서/대상 버전을 주석으로 명시했다.
-- [ ] 마이그레이션 실행 명령이 백엔드가 그대로 사용할 수 있는 형태로 정리되어 있다.
-- [ ] 신규 환경에서 순차 실행 시 DB-2와 동일한 스키마가 재현됨을 확인했다.
+**완료 조건** (검증: TC-DB3-1~2)
+- [x] `001_init.sql`(전체 스키마)로 분리되어 있다 (`backend/src/migrations/001_init.sql`; 원본에 인덱스 추가분이 없어 `002_add_index.sql`은 대상 없음으로 생략).
+- [x] 각 파일 상단에 실행 순서/대상 버전을 주석으로 명시했다.
+- [x] 마이그레이션 실행 명령이 백엔드가 그대로 사용할 수 있는 형태로 정리되어 있다 (`backend/src/migrations/run.js`, 콘솔 로그 기반).
+- [x] 신규 환경에서 순차 실행 시 DB-2와 동일한 스키마가 재현됨을 확인했다 (임시 스키마 `db3_verify`에 재현 후 정리, TC-DB3-2).
 
 ### DB-4. '기본' 카테고리 자동 생성 정책 확정 (DB 관점 결정)
 
@@ -88,11 +88,11 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: DB-2 완료
 
-**완료 조건**
-- [ ] '기본' 카테고리는 회원가입 트랜잭션 내 실제 행 생성 방식임을 결정·문서화했다.
-- [ ] 이 방식이 `(owner_id, name)` unique 제약과 충돌하지 않음을 확인했다.
-- [ ] `category_id NOT NULL + ON DELETE RESTRICT`가 "기본 카테고리 항상 존재" 전제와 정합함을 확인했다.
-- [ ] "회원가입 시 기본 카테고리 1건 자동 INSERT 필요", "기본 카테고리 삭제 방지는 애플리케이션에서 처리 필요"를 BE에 인터페이스 요구사항으로 전달했다.
+**완료 조건** (검증: TC-DB4-1~2)
+- [x] '기본' 카테고리는 회원가입 트랜잭션 내 실제 행 생성 방식임을 결정·문서화했다 ([`docs/decisions/DB-4-default-category-policy.md`](./decisions/DB-4-default-category-policy.md)).
+- [x] 이 방식이 `(owner_id, name)` unique 제약과 충돌하지 않음을 확인했다 (트랜잭션 내 user+기본 카테고리 동시 생성 성공, TC-DB4-2).
+- [x] `category_id NOT NULL + ON DELETE RESTRICT`가 "기본 카테고리 항상 존재" 전제와 정합함을 확인했다.
+- [x] "회원가입 시 기본 카테고리 1건 자동 INSERT 필요", "기본 카테고리 삭제 방지는 애플리케이션에서 처리 필요"를 BE에 인터페이스 요구사항으로 전달했다 (위 결정 문서에 명시).
 
 ### DB-5. 카테고리 삭제 시 재할당 정책 검증 시나리오 수립
 
@@ -101,12 +101,12 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: DB-2, DB-4 완료
 
-**완료 조건**
-- [ ] 소속 할일이 남은 카테고리 삭제 시도가 FK 위반으로 거부됨을 재확인했다.
-- [ ] "소속 todos.category_id를 '기본' id로 UPDATE 후 카테고리 DELETE" 트랜잭션 시나리오를 직접 실행해 검증했다.
-- [ ] 이관 대상 0건(빈 카테고리)인 경우도 오류 없이 동작함을 확인했다.
-- [ ] '기본' 카테고리 자체의 삭제 방지는 DB 제약만으로 불가능하므로 애플리케이션 처리 필요 항목으로 명시했다.
-- [ ] 위 트랜잭션 SQL을 BE-4의 `deleteCategory()` 구현 참고 자료로 정리했다.
+**완료 조건** (검증: TC-DB5-1~5, [`database/scenarios/category-deletion-reassignment.sql`](../database/scenarios/category-deletion-reassignment.sql))
+- [x] 소속 할일이 남은 카테고리 삭제 시도가 FK 위반으로 거부됨을 재확인했다 (TC-DB5-3, `todos_category_id_fkey`).
+- [x] "소속 todos.category_id를 '기본' id로 UPDATE 후 카테고리 DELETE" 트랜잭션 시나리오를 직접 실행해 검증했다 (TC-DB5-2, 커밋 후 이관/삭제 확인).
+- [x] 이관 대상 0건(빈 카테고리)인 경우도 오류 없이 동작함을 확인했다 (TC-DB5-4).
+- [x] '기본' 카테고리 자체의 삭제 방지는 DB 제약만으로 불가능하므로 애플리케이션 처리 필요 항목으로 명시했다 (DB-4 결정 문서에 BE-4 요구사항으로 명시).
+- [x] 위 트랜잭션 SQL을 BE-4의 `deleteCategory()` 구현 참고 자료로 정리했다 (`database/scenarios/category-deletion-reassignment.sql`).
 
 ### DB-6. 목록 조회 필터링(FR-8) 인덱스 성능 확인
 
@@ -115,11 +115,11 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: DB-2 완료 (DB-7 시드 데이터가 있으면 더 유의미)
 
-**완료 조건**
-- [ ] 대표 쿼리 3종(단독 owner, owner+category, 기한초과 조건)에 대해 `EXPLAIN ANALYZE`를 실행하고 기록했다.
-- [ ] 인덱스 스캔 사용 여부(또는 Seq Scan 사유)를 확인했다.
-- [ ] "시작 전/진행중" 필터에 `start_date` 인덱스 커버리지 부족 여부를 확인하고 추가 여부를 판단했다.
-- [ ] 최종 인덱스 목록을 BE-6(목록 조회 쿼리) 참고 자료로 정리했다.
+**완료 조건** (검증: [`database/tests/db-6-index-performance.md`](../database/tests/db-6-index-performance.md), 벤치마크 5만 건 규모 실측 후 데이터 정리 완료)
+- [x] 대표 쿼리 3종(단독 owner, owner+category, 기한초과 조건)에 대해 `EXPLAIN ANALYZE`를 실행하고 기록했다 (TC-DB6-1~3, 각각 1.95ms/0.34ms/1.06ms).
+- [x] 인덱스 스캔 사용 여부(또는 Seq Scan 사유)를 확인했다 (전 구간 Seq Scan 없이 Bitmap Index Scan만 사용됨; TC-DB6-3은 예상한 복합 인덱스 대신 `idx_todos_owner_id`가 선택됨을 확인).
+- [x] "시작 전/진행중" 필터에 `start_date` 인덱스 커버리지 부족 여부를 확인하고 추가 여부를 판단했다 (TC-DB6-4~6: `start_date`는 Filter로 처리되나 추가 비용 1ms 이내로 무의미 → **추가 인덱스 불필요**로 결론, 후보 마이그레이션은 `.disabled` 상태로 보류).
+- [x] 최종 인덱스 목록을 BE-6(목록 조회 쿼리) 참고 자료로 정리했다 (기존 3개 인덱스 유지 확정, 문서 5절에 BE-6 구현 참고사항 포함).
 
 ### DB-7 (선택). 로컬 개발/QA용 시드 데이터 스크립트
 
@@ -161,16 +161,16 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 **의존성**: 데이터베이스 스키마(DB-2) 준비 완료 필요. 다른 BE Task 선행 불필요(최초 착수)
 
 **완료 조건**
-- [ ] project-structure.md 7장과 동일한 디렉토리 구조가 생성되어 있다.
-- [ ] `.env.example`에 필요한 환경변수 키가 모두 문서화되고, 실제 `.env`는 커밋되지 않는다.
-- [ ] `db/pool.js`가 환경변수 기반으로 Pool을 생성하고 기동 시 DB 연결을 로그로 확인할 수 있다.
-- [ ] 상태값 4종과 기본 카테고리명이 `constants/`에 상수로 정의되어 있다.
-- [ ] `GET /health` 등 헬스체크 엔드포인트가 200을 반환한다.
+- [x] project-structure.md 7장과 동일한 디렉토리 구조가 생성되어 있다 (`backend/src/{routes,controllers,services,repositories,middlewares,db,migrations,constants,config}`, `app.js`).
+- [x] `.env.example`에 필요한 환경변수 키가 모두 문서화되고, 실제 `.env`는 커밋되지 않는다 (`POSTGRES_CONNECTION_STRING`/`PORT`/`JWT_SECRET`, `.gitignore`로 `.env` 제외 확인).
+- [x] `db/pool.js`가 환경변수 기반으로 Pool을 생성하고 기동 시 DB 연결을 로그로 확인할 수 있다 (`verifyConnection()`, `npm start` 시 "[db] PostgreSQL 연결 확인 성공." 로그 확인).
+- [x] 상태값 4종과 기본 카테고리명이 `constants/`에 상수로 정의되어 있다 (`constants/status.js`의 `TODO_STATUS`, `constants/category.js`의 `DEFAULT_CATEGORY_NAME`).
+- [x] `GET /health` 등 헬스체크 엔드포인트가 200을 반환한다 (`curl http://localhost:3000/health` → `{"status":"ok"}`, `node --test` 통합 테스트로도 검증).
 
 ### BE-2. 회원가입/로그인 (인증 기본 기능)
 
 **설명**: FR-1, FR-2(UC-1, UC-2) 구현. `user-repository.js`, `auth-service.js`(bcrypt 해싱, JWT 발급,
-회원가입 트랜잭션 내 '기본' 카테고리 자동 생성 — DB-4 정책 반영), `auth-controller.js`, `auth-routes.js`.
+회원가입 트랜잭션 내 '기본' 카테고리 자동 생성 — DB-4 정책 반영, [`docs/decisions/DB-4-default-category-policy.md`](./decisions/DB-4-default-category-policy.md) 참고), `auth-controller.js`, `auth-routes.js`.
 
 **의존성**: BE-1 완료. 데이터베이스 스키마(users/categories) 준비 완료 필요
 
@@ -197,7 +197,7 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 ### BE-4. 카테고리 CRUD 및 기본 카테고리 이관 로직
 
 **설명**: FR-5, FR-6(UC-8, UC-9) 구현. `resolveCategoryId()`(도메인 규칙 2), `deleteCategory()`(트랜잭션 내
-선행 이관 후 삭제, 도메인 규칙 7, DB-5 시나리오 반영), 소유권 검증(도메인 규칙 4).
+선행 이관 후 삭제, 도메인 규칙 7, DB-5 시나리오 반영, [`database/scenarios/category-deletion-reassignment.sql`](../database/scenarios/category-deletion-reassignment.sql) 참고), 소유권 검증(도메인 규칙 4).
 
 **의존성**: BE-3 완료. 데이터베이스 스키마(categories/todos) 준비 완료 필요
 
