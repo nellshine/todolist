@@ -1,0 +1,470 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "TodoList API",
+    "version": "1.0.0",
+    "description": "인증된 사용자가 카테고리와 기간(시작일~종료일) 기준으로 개인 할일(Todo)을 등록·조회·관리하는 TodoList 서비스의 REST API 명세.\n\n참조 문서:\n- docs/1-domain-definition.md (용어, 엔티티, 상태 파생 로직 4장, 비즈니스 규칙 1~7, 유스케이스 UC-1~UC-9, 필터링 기준 7장)\n- docs/2-PRD.md (기능요구사항 FR-1~18)\n- docs/6-erd.md (users/categories/todos 테이블 구조)\n- docs/4-project-structure.md (레이어 구조, 소유권 검증 시 404 처리 원칙)\n\n핵심 규칙 요약:\n- 회원가입/로그인을 완료한 사용자만 할일과 카테고리를 생성·조회·수정·삭제할 수 있다 (도메인 규칙 1).\n- 할일 등록 시 카테고리 미지정 시 '기본' 카테고리가 자동 적용된다 (도메인 규칙 2).\n- 할일의 종료일자는 시작일자보다 이전일 수 없다 (도메인 규칙 3).\n- 본인 소유가 아닌 리소스에 대한 조회·수정·삭제 시도는 403이 아닌 404로 응답한다 (도메인 규칙 4).\n- 할일의 상태(NOT_STARTED/IN_PROGRESS/COMPLETED/OVERDUE)는 저장값이 아니라 조회 시점에 계산되는 파생값이며, 완료 처리된 할일은 종료일자 경과 여부와 무관하게 COMPLETED로 간주한다 (도메인 규칙 6).\n- 카테고리 삭제 시 소속 할일은 삭제되지 않고 '기본' 카테고리로 자동 이관된다 (도메인 규칙 7)."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "로컬 개발 서버"
+    }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "회원가입/로그인 (FR-1, FR-2, FR-3, UC-1, UC-2)" },
+    { "name": "Users", "description": "계정 정보 조회/수정 (FR-4, UC-3)" },
+    { "name": "Categories", "description": "카테고리 생성/조회/수정/삭제 (FR-5, FR-6, UC-8, UC-9)" },
+    { "name": "Todos", "description": "할일 등록/조회/수정/삭제 및 상태·필터 (FR-7~FR-12, UC-4~UC-7)" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "로그인(POST /auth/login) 응답으로 발급된 JWT를 Authorization: Bearer {token} 헤더로 전달한다 (도메인 규칙 1, FR-2, FR-3)."
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "description": "사용자 엔티티 (도메인 정의서 3.1). password_hash 등 민감정보는 응답에 포함하지 않는다.",
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+          "email": { "type": "string", "format": "email", "example": "user@example.com" },
+          "nickname": { "type": "string", "example": "홍길동" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "email", "nickname", "createdAt"]
+      },
+      "Category": {
+        "type": "object",
+        "description": "카테고리 엔티티 (도메인 정의서 3.2). 사용자별로 회원가입 시 자동 생성되는 '기본' 카테고리를 포함한 여러 카테고리를 가질 수 있다.",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "ownerId": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "example": "업무" },
+          "isDefault": {
+            "type": "boolean",
+            "description": "'기본' 카테고리 여부. 모든 사용자는 회원가입 시 자동 생성된 '기본' 카테고리를 암묵적으로 보유한다 (도메인 규칙 2, docs/6-erd.md 보충설명)."
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "ownerId", "name", "isDefault", "createdAt"]
+      },
+      "TodoStatus": {
+        "type": "string",
+        "description": "할일 상태. DB 저장값이 아니라 완료 여부(isCompleted)와 현재일자 대비 시작일자/종료일자를 기준으로 조회 시점에 계산되는 파생값이다 (도메인 정의서 4장, FR-12).\n- NOT_STARTED(시작 전): 미완료 && 현재일자 < startDate\n- IN_PROGRESS(진행중): 미완료 && startDate <= 현재일자 <= endDate\n- COMPLETED(완료): isCompleted = true (완료 시점의 일자·기한 경과 여부와 무관하게 최우선 적용, 도메인 규칙 6)\n- OVERDUE(기한초과): 미완료 && 현재일자 > endDate",
+        "enum": ["NOT_STARTED", "IN_PROGRESS", "COMPLETED", "OVERDUE"]
+      },
+      "Todo": {
+        "type": "object",
+        "description": "할일 엔티티 (도메인 정의서 3.3, docs/6-erd.md todos 테이블).",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "ownerId": { "type": "string", "format": "uuid" },
+          "categoryId": { "type": "string", "format": "uuid" },
+          "title": { "type": "string", "maxLength": 200, "example": "보고서 작성" },
+          "description": { "type": "string", "nullable": true, "example": "3분기 실적 보고서 초안 작성" },
+          "startDate": { "type": "string", "format": "date", "example": "2026-08-01" },
+          "endDate": { "type": "string", "format": "date", "example": "2026-08-05" },
+          "isCompleted": { "type": "boolean" },
+          "completedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "status": {
+            "allOf": [{ "$ref": "#/components/schemas/TodoStatus" }],
+            "readOnly": true,
+            "description": "조회 시점에 계산되는 파생 필드 (도메인 4장, FR-12). 저장/수정 요청 바디에는 포함하지 않는다."
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": [
+          "id", "ownerId", "categoryId", "title", "startDate", "endDate",
+          "isCompleted", "status", "createdAt", "updatedAt"
+        ]
+      },
+      "SignupRequest": {
+        "type": "object",
+        "description": "회원가입 요청 (FR-1, UC-1).",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "format": "password", "minLength": 8, "description": "서버에서 bcrypt 등으로 해싱하여 저장한다 (평문 저장 금지)." },
+          "nickname": { "type": "string", "minLength": 1, "maxLength": 100 }
+        },
+        "required": ["email", "password", "nickname"]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "로그인 요청 (FR-2, UC-2).",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "format": "password" }
+        },
+        "required": ["email", "password"]
+      },
+      "AuthResponse": {
+        "type": "object",
+        "description": "인증 성공 시 발급되는 JWT와 사용자 정보 (FR-2).",
+        "properties": {
+          "token": { "type": "string", "description": "JWT Access Token" },
+          "user": { "$ref": "#/components/schemas/User" }
+        },
+        "required": ["token", "user"]
+      },
+      "UpdateMeRequest": {
+        "type": "object",
+        "description": "계정 정보 수정 요청 (FR-4, UC-3, 도메인 규칙 5). 닉네임/비밀번호 중 변경할 값만 선택적으로 전달한다.",
+        "properties": {
+          "nickname": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "password": { "type": "string", "format": "password", "minLength": 8 }
+        },
+        "minProperties": 1
+      },
+      "CreateCategoryRequest": {
+        "type": "object",
+        "description": "카테고리 생성 요청 (FR-5, UC-8).",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100, "example": "업무" }
+        },
+        "required": ["name"]
+      },
+      "UpdateCategoryRequest": {
+        "type": "object",
+        "description": "카테고리 이름 수정 요청 (UC-9).",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 }
+        },
+        "required": ["name"]
+      },
+      "CreateTodoRequest": {
+        "type": "object",
+        "description": "할일 등록 요청 (FR-7, UC-4). categoryId를 지정하지 않으면 '기본' 카테고리가 자동 적용된다 (도메인 규칙 2). startDate <= endDate 여야 하며 위반 시 400으로 거부된다 (도메인 규칙 3, FR-7).",
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": { "type": "string", "nullable": true },
+          "categoryId": { "type": "string", "format": "uuid", "nullable": true, "description": "미지정 시 '기본' 카테고리가 자동 적용된다 (도메인 규칙 2)." },
+          "startDate": { "type": "string", "format": "date" },
+          "endDate": { "type": "string", "format": "date" }
+        },
+        "required": ["title", "startDate", "endDate"]
+      },
+      "UpdateTodoRequest": {
+        "type": "object",
+        "description": "할일 수정 요청 (FR-9, UC-6). 완료 처리(isCompleted=true)/완료 취소(isCompleted=false)를 포함해 제목/카테고리/기간을 부분 수정할 수 있다. startDate/endDate를 함께 변경하는 경우에도 startDate <= endDate 규칙이 적용된다 (도메인 규칙 3).",
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": { "type": "string", "nullable": true },
+          "categoryId": { "type": "string", "format": "uuid" },
+          "startDate": { "type": "string", "format": "date" },
+          "endDate": { "type": "string", "format": "date" },
+          "isCompleted": { "type": "boolean", "description": "true로 변경 시 완료 처리(completedAt 기록, 상태는 종료일자 경과 여부와 무관하게 COMPLETED), false로 변경 시 완료 취소 (도메인 규칙 6)." }
+        },
+        "minProperties": 1
+      },
+      "Error": {
+        "type": "object",
+        "description": "공통 에러 응답 포맷.",
+        "properties": {
+          "code": { "type": "string", "example": "VALIDATION_ERROR" },
+          "message": { "type": "string", "example": "종료일자는 시작일자보다 이전일 수 없습니다." },
+          "details": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string" },
+                "reason": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["code", "message"]
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "요청 값 유효성 오류 (예: startDate > endDate, 필수값 누락 등, 도메인 규칙 3, FR-7/FR-14).",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Unauthorized": {
+        "description": "인증 토큰이 없거나 유효하지 않음 (도메인 규칙 1, FR-3). 보호된 API는 예외 없이 401로 거부된다.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "리소스가 존재하지 않거나, 본인 소유가 아닌 리소스에 접근을 시도한 경우 (도메인 규칙 4, FR-9~11). 소유권 위반 여부는 노출하지 않고 항상 404로 응답한다.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Conflict": {
+        "description": "리소스 중복 (예: 이메일 중복 가입, FR-1).",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "회원가입",
+        "description": "이메일/비밀번호/닉네임을 입력해 계정을 생성한다 (FR-1, UC-1). 비밀번호는 해싱하여 저장하며, 가입과 동시에 애플리케이션 레벨에서 '기본' 카테고리가 자동 생성/보유된다 (도메인 규칙 2). 이메일이 이미 존재하면 409로 거부된다.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SignupRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "계정 생성 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "로그인",
+        "description": "이메일/비밀번호 인증 후 JWT 토큰을 발급한다 (FR-2, UC-2). 올바른 자격증명은 토큰과 사용자 정보를 반환하고, 틀린 자격증명은 401로 거부된다.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "로그인 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": {
+            "description": "이메일 또는 비밀번호가 일치하지 않음 (FR-2).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "내 정보 조회",
+        "description": "인증된 사용자 본인의 계정 정보를 조회한다 (도메인 규칙 1, 5).",
+        "responses": {
+          "200": {
+            "description": "조회 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "patch": {
+        "tags": ["Users"],
+        "summary": "계정 정보 수정",
+        "description": "닉네임/비밀번호 등 자신의 계정 정보를 수정한다 (FR-4, UC-3, 도메인 규칙 5). 수정 후 재조회 시 변경 값이 즉시 반영된다.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateMeRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "수정 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": ["Categories"],
+        "summary": "카테고리 목록 조회",
+        "description": "인증된 사용자 소유의 카테고리 목록을 조회한다 ('기본' 카테고리 포함, 도메인 정의서 3.2).",
+        "responses": {
+          "200": {
+            "description": "조회 성공",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Categories"],
+        "summary": "카테고리 생성",
+        "description": "이름을 지정해 새 카테고리를 생성한다 (FR-5, UC-8). 생성 직후 목록/필터에 즉시 노출된다.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateCategoryRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "생성 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Category" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": {
+            "description": "동일 사용자 내 동일한 이름의 카테고리가 이미 존재함.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/categories/{categoryId}": {
+      "parameters": [
+        {
+          "name": "categoryId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "format": "uuid" }
+        }
+      ],
+      "patch": {
+        "tags": ["Categories"],
+        "summary": "카테고리 수정",
+        "description": "카테고리 이름을 수정한다 (UC-9). 소유자 본인만 수정할 수 있으며, 타 계정 소유 카테고리 ID로 접근 시 404가 반환된다 (도메인 규칙 4).",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateCategoryRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "수정 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Category" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Categories"],
+        "summary": "카테고리 삭제",
+        "description": "카테고리를 삭제한다 (FR-6, UC-9, 도메인 규칙 7). 삭제 시 해당 카테고리에 속한 할일은 삭제되지 않고 트랜잭션 내에서 모두 '기본' 카테고리로 자동 이관된 후 카테고리가 삭제된다. 소유자 본인만 삭제할 수 있으며, 타 계정 소유 카테고리 ID로 접근 시 404가 반환된다 (도메인 규칙 4). '기본' 카테고리 자체는 삭제할 수 없다.",
+        "responses": {
+          "204": { "description": "삭제 성공 (소속 할일은 '기본' 카테고리로 이관됨, 도메인 규칙 7)" },
+          "400": {
+            "description": "'기본' 카테고리는 삭제할 수 없음.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/todos": {
+      "get": {
+        "tags": ["Todos"],
+        "summary": "할일 목록 조회",
+        "description": "인증된 사용자 소유의 할일 목록을 조회한다 (UC-5, FR-8, 도메인 7장). categoryId와 status 쿼리 파라미터는 AND 조건으로 동시 적용 가능하며(도메인 2장 필터 정의), 지정하지 않으면 사용자 소유의 모든 할일을 반환한다. status는 저장값이 아닌 파생값(4장) 기준으로 필터링된다.",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "description": "지정한 카테고리('기본' 카테고리 포함)에 속한 할일만 조회 (도메인 7장).",
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "4장 기준으로 파생 계산된 상태로 필터링 (도메인 7장, FR-8).",
+            "schema": { "$ref": "#/components/schemas/TodoStatus" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "조회 성공",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Todo" } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Todos"],
+        "summary": "할일 등록",
+        "description": "제목/설명/카테고리(선택)/시작일자/종료일자를 입력해 할일을 생성한다 (FR-7, UC-4). categoryId를 지정하지 않으면 '기본' 카테고리가 자동 적용된다 (도메인 규칙 2). startDate <= endDate 여야 하며 위반 시 저장 시점에 400으로 거부된다 (도메인 규칙 3).",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTodoRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "등록 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Todo" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": {
+            "description": "지정한 categoryId가 존재하지 않거나 본인 소유가 아님 (도메인 규칙 4).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/todos/{todoId}": {
+      "parameters": [
+        {
+          "name": "todoId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "format": "uuid" }
+        }
+      ],
+      "get": {
+        "tags": ["Todos"],
+        "summary": "할일 단건 조회",
+        "description": "할일 ID로 단건을 조회한다. 소유자 본인만 조회할 수 있으며, 타 계정 소유 할일 ID로 접근 시 404가 반환된다 (도메인 규칙 4).",
+        "responses": {
+          "200": {
+            "description": "조회 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Todo" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["Todos"],
+        "summary": "할일 수정",
+        "description": "제목/카테고리/기간/완료 여부(완료 처리/취소 포함)를 수정한다 (FR-9, UC-6). 소유자 본인의 수정만 반영되며, 타 계정 소유 할일 ID로 수정 시도 시 404가 반환된다 (도메인 규칙 4). startDate/endDate 변경 시에도 startDate <= endDate 규칙이 적용되며 위반 시 400이다 (도메인 규칙 3). isCompleted를 true로 변경하면 completedAt이 기록되고 상태는 종료일자 경과 여부와 무관하게 COMPLETED로 계산된다 (도메인 규칙 6).",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTodoRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "수정 성공",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Todo" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Todos"],
+        "summary": "할일 삭제",
+        "description": "할일을 삭제한다 (FR-10, UC-7). 삭제 후 목록에서 즉시 사라지며, 소유자 본인만 삭제할 수 있고 타 계정 소유 할일 ID로 삭제 시도 시 404가 반환된다 (도메인 규칙 4).",
+        "responses": {
+          "204": { "description": "삭제 성공" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  }
+}
