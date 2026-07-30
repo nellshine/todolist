@@ -81,12 +81,13 @@ PRD 9장 리스크에 "자동화 테스트 스위트 미구축"이 명시되어 
 
 ## 5. 설정/보안/운영 원칙
 
-- **환경변수 관리**: DB 접속정보, JWT 시크릿, 포트 등은 `.env`로 관리하고 `.gitignore`에 포함해 절대 커밋하지 않는다. 대신 키 목록만 담은 `.env.example`을 저장소에 커밋해 필요한 변수를 문서화한다.
+- **환경변수 관리**: DB 접속정보, JWT 시크릿, 포트, CORS 허용 오리진(`CORS_ORIGIN`, 콤마로 구분된 목록) 등은 `.env`로 관리하고 `.gitignore`에 포함해 절대 커밋하지 않는다. 대신 키 목록만 담은 `.env.example`을 저장소에 커밋해 필요한 변수를 문서화한다.
 - **DB 마이그레이션**: ORM을 사용하지 않으므로 `db/migrations/*.sql` 형태로 순번(`001_init.sql`, `002_...sql`)을 붙여 순차 관리한다(PRD 7.2). 2일 일정상 정교한 도구 없이 초기 스키마 스크립트 1~2개 수준으로 충분하다.
 - **로깅**: 요청 단위 로그(메서드/경로/상태코드/응답시간)와 에러 로그를 구조화된 형태로 남긴다. 비밀번호/토큰 등 민감정보는 로그에 남기지 않는다.
 - **인증(도메인 규칙 1) 강제 위치**: Express 미들웨어(`src/middlewares/auth-middleware.js`)에서 모든 보호된 라우트 진입 전에 토큰을 검증하고, 미인증 요청은 예외 없이 401로 차단한다(FR-3).
 - **소유권 검증/404 처리(도메인 규칙 4) 강제 위치**: services 레이어에서 리소스 조회 시 `owner_id`가 요청 사용자와 일치하는지 확인하고, 불일치·미존재 시 동일하게 404를 반환한다. controllers는 services가 던진 결과를 그대로 상태 코드로 변환할 뿐 자체적으로 소유권을 판단하지 않는다.
-- **기본 보안**: CORS는 허용 오리진(프론트엔드 도메인)만 명시적으로 열어둔다. 모든 SQL은 `pg`의 파라미터 바인딩(`$1, $2 ...`)을 사용해 SQL 인젝션을 방지하며, 문자열 결합으로 쿼리를 생성하지 않는다. 요청 바디는 컨트롤러 진입 전 유효성 검증(필수값, 날짜 형식 등)을 거친다. 비밀번호는 bcrypt로 해싱해 저장한다.
+- **기본 보안**: CORS는 허용 오리진(프론트엔드 도메인)만 명시적으로 열어두며, 오리진 목록은 하드코딩하지 않고 `CORS_ORIGIN` 환경변수로 분리해 `app.js`에서 가장 먼저 등록되는 미들웨어로 적용한다. 모든 SQL은 `pg`의 파라미터 바인딩(`$1, $2 ...`)을 사용해 SQL 인젝션을 방지하며, 문자열 결합으로 쿼리를 생성하지 않는다. 요청 바디는 컨트롤러 진입 전 유효성 검증(필수값, 날짜 형식 등)을 거친다. 비밀번호는 bcrypt로 해싱해 저장한다.
+- **API 문서화**: `swagger/swagger.json`(OpenAPI 3.0.3)을 `swagger-ui-express`로 `/api-docs` 경로에 서빙한다. 인증 없이 접근 가능하며, 실제 라우트 스펙(엔드포인트/요청·응답 스키마)과 어긋나지 않도록 API 변경 시 함께 갱신한다.
 
 ## 6. 프론트엔드 디렉토리 구조
 
@@ -136,8 +137,9 @@ backend/
   - 기본 카테고리 적용 예시: `category-service.js`의 `resolveCategoryId(categoryId, userId)`가 `categoryId`가 없을 때 사용자의 '기본' 카테고리 id를 반환한다(도메인 규칙 2).
   - 카테고리 이관 예시: `category-service.js`의 `deleteCategory(categoryId, userId)`가 삭제 전 소속 할일을 '기본' 카테고리로 재할당하는 리포지토리 함수를 호출한다(도메인 규칙 7).
 - `repositories`: 순수 SQL 실행만 담당(예: `findTodoById`, `updateTodoCategory`). 도메인 판단 없음, 파라미터 바인딩 쿼리만 사용.
-- `middlewares`: `auth-middleware.js`가 JWT 검증 및 401 처리(도메인 규칙 1), `error-handler.js`가 서비스에서 던진 에러를 일관된 HTTP 응답으로 변환(404/400 등).
+- `middlewares`: `auth-middleware.js`가 JWT 검증 및 401 처리(도메인 규칙 1), `error-handler.js`가 서비스에서 던진 에러를 일관된 HTTP 응답으로 변환(404/400 등), `request-logger.js`가 요청 단위 로그(메서드/경로/상태코드/응답시간)를 남긴다.
 - `migrations`: ORM 없이 SQL 파일을 순번대로 수동 실행하여 스키마를 관리한다(PRD 7.2).
+- `app.js` 미들웨어 등록 순서: `cors`(환경변수 기반 허용 오리진) → `express.json()` → `request-logger` → `/api-docs`(Swagger UI, 인증 불필요) → 도메인 라우트(health/auth/user/category/todo) → `error-handler`(최후단).
 
 ## 8. 문서 간 정합성 우선순위
 

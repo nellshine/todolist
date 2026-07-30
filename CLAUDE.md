@@ -35,6 +35,7 @@ TodoList 프로젝트에서 작업하는 모든 세션(개발/문서/리뷰)에 
 | [`docs/6-erd.md`](./docs/6-erd.md)                             | ERD, FK/삭제 정책, '기본' 카테고리 설계 근거                                                                                                      |
 | [`docs/7-execution-plan.md`](./docs/7-execution-plan.md)       | DB/BE/FE Task 목록(Task ID 체계 `DB-n`/`BE-n`/`FE-n`), 의존성, 완료 조건 체크리스트 — **작업 시작 전 해당 Task 항목 확인, 완료 시 체크박스 갱신** |
 | [`docs/8-wireframe.md`](./docs/8-wireframe.md)                 | 화면별 와이어프레임(데스크톱/모바일), 반응형 재배치 원칙                                                                                          |
+| [`docs/9-style-guide.md`](./docs/9-style-guide.md)             | 프론트엔드 디자인 토큰(컬러/타이포그래피/간격/radius) 및 컴포넌트 스타일 가이드                                                                   |
 | [`docs/decisions/`](./docs/decisions/)                         | 개별 설계 결정 기록(ADR 성격, 예: 기본 카테고리 자동 생성 정책)                                                                                   |
 | `database/schema.sql`, `backend/src/migrations/`               | 실제 DDL 및 마이그레이션 (스키마 변경은 여기서만)                                                                                                 |
 | `swagger/swagger.json`                                         | OpenAPI 스펙                                                                                                                                      |

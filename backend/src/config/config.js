@@ -13,6 +13,12 @@ const config = {
   port: process.env.PORT || 3000,
   postgresConnectionString: process.env.POSTGRES_CONNECTION_STRING,
   jwtSecret: process.env.JWT_SECRET,
+  // 콤마로 구분된 허용 오리진 목록 (예: "http://localhost:5173,https://todolist.example.com").
+  // 프론트엔드 도메인만 명시적으로 허용한다 (project-structure.md 5장 보안 원칙).
+  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 };
 
 module.exports = config;

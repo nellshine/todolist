@@ -167,6 +167,8 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 - [x] 상태값 4종과 기본 카테고리명이 `constants/`에 상수로 정의되어 있다 (`constants/status.js`의 `TODO_STATUS`, `constants/category.js`의 `DEFAULT_CATEGORY_NAME`).
 - [x] `GET /health` 등 헬스체크 엔드포인트가 200을 반환한다 (`curl http://localhost:3000/health` → `{"status":"ok"}`, `node --test` 통합 테스트로도 검증).
 
+BE-1 이후 추가 반영 사항: CORS 허용 오리진을 하드코딩하지 않고 `CORS_ORIGIN` 환경변수(콤마 구분 목록, `.env`/`.env.example`)로 분리해 `config.js`가 파싱하고 `app.js`에서 가장 먼저 등록되는 `cors` 미들웨어에 전달하도록 수정했다. 또한 `swagger-ui-express`를 추가해 `swagger/swagger.json`을 `/api-docs`에서 인증 없이 열람 가능하도록 연결했으며, 기존에 코드로만 존재하고 스펙에는 없던 `/health`를 swagger.json에 `Health` 태그/`HealthResponse` 스키마로 문서화했다(문서-코드 정합성 보완, 상세는 [`docs/4-project-structure.md`](./4-project-structure.md) 5장).
+
 ### BE-2. 회원가입/로그인 (인증 기본 기능)
 
 **설명**: FR-1, FR-2(UC-1, UC-2) 구현. `user-repository.js`, `auth-service.js`(bcrypt 해싱, JWT 발급,
