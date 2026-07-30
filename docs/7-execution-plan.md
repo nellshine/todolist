@@ -174,12 +174,14 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-1 완료. 데이터베이스 스키마(users/categories) 준비 완료 필요
 
-**완료 조건**
-- [ ] 회원가입 시 계정이 생성되고 비밀번호가 bcrypt 해시로 저장됨을 확인했다.
-- [ ] 회원가입 성공 시 '기본' 카테고리가 자동 생성되어 있다(도메인 규칙 2).
-- [ ] 이메일 중복 재가입 시도가 거부된다(FR-1, E-4).
-- [ ] 올바른/틀린 자격증명에 대한 로그인 결과가 각각 정확히 처리된다(FR-2).
-- [ ] 비즈니스 로직은 서비스 레이어에, SQL은 리포지토리에만 위치한다(레이어 원칙).
+**완료 조건** (검증: `npm test` 19/19 통과, line coverage 91.18%; `src/services/auth-service.test.js` 7건, `src/routes/auth-routes.test.js` 5건)
+- [x] 회원가입 시 계정이 생성되고 비밀번호가 bcrypt 해시로 저장됨을 확인했다 (bcryptjs, `$2` prefix 확인, DB 직접 조회 및 테스트로 검증).
+- [x] 회원가입 성공 시 '기본' 카테고리가 자동 생성되어 있다(도메인 규칙 2) (트랜잭션 내 `category-repository.createCategory` 호출, DB 조회로 확인).
+- [x] 이메일 중복 재가입 시도가 거부된다(FR-1, E-4) (`ConflictError` 409 `EMAIL_ALREADY_EXISTS`; unique violation 레이스 컨디션도 이중 방어).
+- [x] 올바른/틀린 자격증명에 대한 로그인 결과가 각각 정확히 처리된다(FR-2) (200+JWT / 401 `INVALID_CREDENTIALS`, 존재하지 않는 이메일도 동일 401로 계정 존재 여부 비노출).
+- [x] 비즈니스 로직은 서비스 레이어에, SQL은 리포지토리에만 위치한다(레이어 원칙) (`auth-service.js`가 트랜잭션·해싱·JWT 발급 전담, `user-repository.js`/`category-repository.js`는 순수 SQL만).
+
+구현 중 발견한 수정 사항: 초기 구현이 `POST /auth/signup` 응답을 `{ user: {...} }`로 감싸고 `created_at`(snake_case)을 그대로 반환해 `swagger/swagger.json`의 `User` 스키마(평탄한 객체, `createdAt` camelCase)와 어긋났다. 테스트 실행 중 발견해 `auth-controller.js`(응답 언랩)와 `auth-service.js`의 `toSafeUser()`(camelCase 매핑)를 수정해 스펙과 일치시켰다.
 
 ### BE-3. 인증 미들웨어 (JWT 검증)
 
@@ -188,11 +190,11 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-2(JWT 발급/시크릿) 완료
 
-**완료 조건**
-- [ ] 토큰 없이 보호 API 호출 시 예외 없이 401이 반환된다(FR-3, E-3).
-- [ ] 만료/위조 토큰도 401로 거부된다.
-- [ ] 유효 토큰은 `req.user`를 채워 컨트롤러에 전달된다.
-- [ ] 인증 로직이 미들웨어 한 곳에만 존재하고 중복 구현이 없다.
+**완료 조건** (검증: `npm test` 24/24 통과, `auth-middleware.js` line/branch/funcs 커버리지 100%; `src/middlewares/auth-middleware.test.js` 5건 — 아직 보호 리소스 라우트가 없어 미들웨어 격리 유닛 테스트로 검증, app.js에는 전역 등록하지 않고 BE-4에서 라우트별로 최초 연결 예정)
+- [x] 토큰 없이 보호 API 호출 시 예외 없이 401이 반환된다(FR-3, E-3) (`Authorization` 헤더 부재/비-Bearer 형식 모두 `UnauthorizedError`→401).
+- [x] 만료/위조 토큰도 401로 거부된다 (만료 토큰(`expiresIn:-1`), 다른 secret으로 서명한 위조 토큰 각각 401 확인).
+- [x] 유효 토큰은 `req.user`를 채워 컨트롤러에 전달된다 (`req.user = { id: decoded.userId }`, 에러 없이 `next()` 호출 확인).
+- [x] 인증 로직이 미들웨어 한 곳에만 존재하고 중복 구현이 없다 (`grep -rn "jwt.verify" backend/src`로 `auth-middleware.js` 외 중복 없음 확인; 응답 생성은 전부 기존 `error-handler.js`에 위임).
 
 ### BE-4. 카테고리 CRUD 및 기본 카테고리 이관 로직
 
@@ -201,12 +203,14 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-3 완료. 데이터베이스 스키마(categories/todos) 준비 완료 필요
 
-**완료 조건**
-- [ ] 카테고리 생성 즉시 목록 조회에 노출된다(FR-5).
-- [ ] 기본 카테고리 미생성 사용자도 할일 등록이 정상 처리된다.
-- [ ] 카테고리 삭제 시 소속 할일이 삭제되지 않고 '기본'으로 재할당됨을 확인했다(도메인 규칙 7, FR-6).
-- [ ] 타 계정 소유 카테고리 접근 시 404가 반환된다(도메인 규칙 4).
-- [ ] 이관+삭제가 하나의 트랜잭션으로 처리된다.
+**완료 조건** (검증: `npm test` 40/40 통과, line coverage 93.07%; `category-service.test.js` 10건, `category-routes.test.js` 6건)
+- [x] 카테고리 생성 즉시 목록 조회에 노출된다(FR-5) (POST 후 GET으로 확인, HTTP/서비스 레벨 모두 검증).
+- [x] 기본 카테고리 미생성 사용자도 할일 등록이 정상 처리된다 — BE-5 완료로 **통합 재확인 완료**: `POST /todos`(categoryId 생략) 응답의 `categoryId`가 해당 owner의 '기본' 카테고리 id와 일치함을 서비스/HTTP 레벨 모두에서 검증했다(도메인 규칙 2, `resolveCategoryId` 재사용).
+- [x] 카테고리 삭제 시 소속 할일이 삭제되지 않고 '기본'으로 재할당됨을 확인했다(도메인 규칙 7, FR-6) (todos를 직접 INSERT해 사전조건 구성 후 DELETE 호출, category_id가 '기본'으로 변경됨을 확인; 이관 대상 0건인 빈 카테고리 삭제도 정상 동작 확인).
+- [x] 타 계정 소유 카테고리 접근 시 404가 반환된다(도메인 규칙 4) (두 사용자로 PATCH/DELETE 교차 시도, 403이 아닌 404 확인).
+- [x] 이관+삭제가 하나의 트랜잭션으로 처리된다 (`pool.connect()`→BEGIN→선행 UPDATE→DELETE→COMMIT, `database/scenarios/category-deletion-reassignment.sql` 시나리오 A/C 패턴 그대로 반영). 부가로 '기본' 카테고리 자체 삭제는 DB 제약이 아닌 서비스 레벨에서 400으로 방지됨을 확인(DB-4 결정 반영).
+
+구현 중 발견/수정한 이슈: 병행 작성된 두 테스트 파일의 이메일 접두사가 `be4-test-`/`be4-test-route-`로 겹쳐(SQL LIKE 매칭), 한 파일의 cleanup이 다른 파일의 진행 중인 테스트 사용자를 삭제하는 레이스 컨디션이 있었다. `category-service.test.js`의 접두사를 `be4-test-svc-`로 변경해 해결했다.
 
 ### BE-5. 할일 등록/수정/삭제 및 소유권 검증
 
@@ -215,12 +219,14 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-3, BE-4(`resolveCategoryId` 재사용) 완료. 데이터베이스 스키마(todos, CHECK 제약) 준비 완료 필요
 
-**완료 조건**
-- [ ] 카테고리 미지정 등록 시 '기본' 카테고리가 자동 적용된다(FR-7).
-- [ ] 종료일자<시작일자 요청이 거부되고, 시작일=종료일은 정상 저장된다(도메인 규칙 3, E-1).
-- [ ] 타 계정 소유 할일 수정/삭제 시도 시 404가 반환된다(도메인 규칙 4, E-2).
-- [ ] 완료 처리/취소 시 `is_completed`/`completed_at`이 정확히 갱신된다.
-- [ ] 삭제된 할일은 목록 조회에서 더 이상 반환되지 않는다.
+**완료 조건** (검증: `npm test` 60/60 통과, line coverage 92.98%; `todo-service.test.js` 12건(`deriveTodoStatus` 단위 5건+통합 7건), `todo-routes.test.js` 7건)
+- [x] 카테고리 미지정 등록 시 '기본' 카테고리가 자동 적용된다(FR-7) (`resolveCategoryId` 재사용, BE-4 이월 조건도 함께 재확인 완료).
+- [x] 종료일자<시작일자 요청이 거부되고, 시작일=종료일은 정상 저장된다(도메인 규칙 3, E-1) (등록/수정(부분 병합 포함) 각각 400/성공 확인).
+- [x] 타 계정 소유 할일 수정/삭제 시도 시 404가 반환된다(도메인 규칙 4, E-2) (GET/PATCH/DELETE 3종 모두 404, `getTodoOwnedByUser()`로 단일화).
+- [x] 완료 처리/취소 시 `is_completed`/`completed_at`이 정확히 갱신된다 (true→completedAt 채움, false→null로 복귀 확인).
+- [x] 삭제된 할일은 목록 조회에서 더 이상 반환되지 않는다 — **주의**: 목록 조회 API(`GET /todos`)는 BE-6 범위라 아직 없어, 삭제 후 단건 조회(`GET /todos/:id`)가 404를 반환하는 것으로 대체 검증했다. 목록 기반 재확인은 BE-6 완료 시 진행.
+
+구현 중 발견/수정한 이슈: `node-postgres`가 DATE 컬럼을 로컬 자정 기준 JS `Date` 객체로 반환해, 이 환경 타임존(UTC+9로 추정)에서 `toISOString()` 직렬화 시 날짜가 하루 밀리는 버그를 테스트로 발견했다. `db/pool.js`에서 DATE(OID 1082) 타입 파서를 원본 문자열 그대로 반환하도록 등록해 근본 원인을 제거했다(날짜 전용 컬럼은 타임존 개념이 없으므로 문자열로 다루는 것이 안전). 이 수정으로 `deriveTodoStatus()`의 날짜 비교도 함께 정확해졌다.
 
 ### BE-6. 할일 목록 조회, 필터링(AND), 상태 파생 로직
 
@@ -229,12 +235,12 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-5 완료. 데이터베이스 인덱스(DB-6) 준비 완료 필요
 
-**완료 조건**
-- [ ] 필터 미지정 시 소유 전체 할일이 반환된다.
-- [ ] 카테고리 단독 필터, 상태 단독 필터(4종, 경계값 포함)가 각각 정확히 동작한다.
-- [ ] 카테고리+상태 동시 적용 시 AND 조합 결과만 반환된다(FR-8).
-- [ ] 완료 처리된 할일은 기한 경과와 무관하게 '완료'로만 표시된다(도메인 규칙 6).
-- [ ] 상태 계산이 백엔드 서비스 레이어 단일 소스에만 존재한다(FR-12).
+**완료 조건** (검증: `npm test` 71/71 통과, line coverage 93.28%; `todo-service.test.js`에 `listTodos()` 6건, `todo-routes.test.js`에 `GET /todos` 5건 추가)
+- [x] 필터 미지정 시 소유 전체 할일이 반환된다 (4가지 상태 todo 생성 후 필터 없이 전체 반환 확인).
+- [x] 카테고리 단독 필터, 상태 단독 필터(4종, 경계값 포함)가 각각 정확히 동작한다 (경계값은 BE-5의 `deriveTodoStatus` 단위테스트에서 이미 검증, 목록 필터 레벨에서 4종 개별 재확인).
+- [x] 카테고리+상태 동시 적용 시 AND 조합 결과만 반환된다(FR-8) (카테고리 A+상태 X 조합 시 교집합만 반환 확인).
+- [x] 완료 처리된 할일은 기한 경과와 무관하게 '완료'로만 표시된다(도메인 규칙 6) (`status=OVERDUE` 필터에 완료 처리된(종료일 경과) todo가 섞이지 않고 `status=COMPLETED`에만 포함됨을 확인).
+- [x] 상태 계산이 백엔드 서비스 레이어 단일 소스에만 존재한다(FR-12) (`grep`으로 `deriveTodoStatus` 정의/사용이 `todo-service.js` 한 곳뿐임을 확인, repository에는 `start_date`/`end_date` 관련 비교 조건문이 전혀 없음 — `category_id`는 SQL WHERE로, `status`는 애플리케이션 레벨에서 `deriveTodoStatus` 재사용으로 필터링해 로직 중복 없음).
 
 ### BE-7. 계정 정보 수정 (Should)
 
@@ -242,11 +248,11 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-2, BE-3 완료. Must 항목(BE-1~BE-6) 완료 후 착수 권장
 
-**완료 조건**
-- [ ] 본인만 자신의 정보를 수정할 수 있고, 미인증 시 401이 반환된다.
-- [ ] 닉네임 변경이 즉시 반영된다(FR-4).
-- [ ] 비밀번호 변경 후 새 비밀번호로만 로그인된다.
-- [ ] 잘못된 입력값은 저장 전 거부된다.
+**완료 조건** (검증: `npm test` 82/82 통과, line coverage 93.92%; `user-service.test.js` 4건, `user-routes.test.js` 7건)
+- [x] 본인만 자신의 정보를 수정할 수 있고, 미인증 시 401이 반환된다 — `/users/me`는 대상 id를 받지 않고 항상 `req.user.id`(토큰 소유자)만 사용하므로 "타인 정보 수정" 시나리오 자체가 성립하지 않는다. 토큰 없이 GET/PATCH 호출 시 401(`auth-middleware` 재사용)만 확인.
+- [x] 닉네임 변경이 즉시 반영된다(FR-4) (PATCH 응답과 이후 GET 재조회 모두에서 새 닉네임 확인).
+- [x] 비밀번호 변경 후 새 비밀번호로만 로그인된다 (PATCH 후 기존 비밀번호 로그인 401, 새 비밀번호 로그인 200).
+- [x] 잘못된 입력값은 저장 전 거부된다 (빈 body `MISSING_REQUIRED_FIELD`, 공백 nickname `INVALID_NICKNAME`, 8자 미만 password `INVALID_PASSWORD` 모두 400).
 
 ### BE-8. 전역 에러 처리 미들웨어 및 응답 포맷 통일
 
@@ -254,12 +260,12 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-2, BE-4, BE-5, BE-6 완료 필요
 
-**완료 조건**
-- [ ] 소유권/미존재 에러가 전역 미들웨어를 통해 일관되게 404로 변환된다.
-- [ ] 유효성 검증 실패가 모두 400과 일관된 포맷으로 반환된다.
-- [ ] 500 에러 시 스택 트레이스가 클라이언트에 노출되지 않는다.
-- [ ] 모든 에러 응답이 동일 JSON 스키마를 따른다.
-- [ ] 로그에 비밀번호/토큰 원문이 남지 않는다.
+**완료 조건** (검증: `npm test` 89/89 통과, `error-handler.js` line/branch/funcs 커버리지 100%; `error-handler.test.js` 7건 + `auth-routes.test.js` 1건 추가)
+- [x] 소유권/미존재 에러가 전역 미들웨어를 통해 일관되게 404로 변환된다 (`NotFoundError`→404, BE-4~6에서 이미 검증된 것을 `error-handler` 유닛테스트로도 재확인).
+- [x] 유효성 검증 실패가 모두 400과 일관된 포맷으로 반환된다 (`ValidationError`→400에 더해, 이번에 발견한 `express.json()` body 파싱 실패(`entity.parse.failed`)도 400 `INVALID_JSON_BODY`로 통일 처리하도록 수정).
+- [x] 500 에러 시 스택 트레이스가 클라이언트에 노출되지 않는다 (`console.error(err)`는 서버 콘솔에만, 응답 body는 고정 메시지만 반환함을 유닛테스트로 확인).
+- [x] 모든 에러 응답이 동일 JSON 스키마를 따른다 — **수정 사항**: 기존 500 fallback 응답에 `code` 필드가 누락되어 있던 것을 발견, `code:'INTERNAL_SERVER_ERROR'` 추가로 모든 에러 응답이 `{code, message}` 스키마(swagger `Error`)로 통일됨.
+- [x] 로그에 비밀번호/토큰 원문이 남지 않는다 (`grep -rn "console\." backend/src`로 전체 로깅 지점 재점검, 요청 로그는 메서드/경로/상태코드/응답시간만 기록하며 민감정보 노출 지점 없음을 확인).
 
 ### BE-9. 핵심 비즈니스 로직 단위 테스트
 
@@ -267,12 +273,12 @@ ORM 미사용)에 따라 `database/schema.sql`을 `001_init.sql` 등 순번 파�
 
 **의존성**: BE-6 완료 (소유권 테스트 추가 시 BE-5 필요)
 
-**완료 조건**
-- [ ] NOT_STARTED 케이스가 테스트로 검증된다.
-- [ ] IN_PROGRESS(경계값 포함) 케이스가 검증된다.
-- [ ] COMPLETED(기한 경과 무관) 케이스가 검증된다(도메인 규칙 6).
-- [ ] OVERDUE 케이스가 검증된다.
-- [ ] 전체 테스트가 `npm test`로 통과한다.
+**완료 조건** (검증: `npm test` 89/89 통과 재확인 — 별도 신규 구현 없이 BE-4/5/6에서 이미 작성된 테스트로 충족됨이 확인되어, 서브에이전트 병렬 구현/테스트 작성 없이 직접 재검증으로 완료 처리)
+- [x] NOT_STARTED 케이스가 테스트로 검증된다 (`todo-service.test.js` "완료되지 않았고 오늘 < 시작일이면 NOT_STARTED를 반환한다", BE-5에서 작성).
+- [x] IN_PROGRESS(경계값 포함) 케이스가 검증된다 (동 파일 "시작일 = 오늘(경계값)"/"오늘 = 종료일(경계값)" 2건, BE-5).
+- [x] COMPLETED(기한 경과 무관) 케이스가 검증된다(도메인 규칙 6) (동 파일 "완료 처리된 할일은 종료일이 지났어도 항상 COMPLETED", BE-5; `listTodos()`의 status 필터 테스트로 BE-6에서 목록 레벨 재확인도 완료).
+- [x] OVERDUE 케이스가 검증된다 (동 파일 "완료되지 않았고 오늘 > 종료일이면 OVERDUE", BE-5).
+- [x] 전체 테스트가 `npm test`로 통과한다 (89/89, 13개 스위트 전부 통과 재확인). 부가로 소유권 검증(`getTodoOwnedByUser`)에 대한 단위 테스트도 BE-4/BE-5에서 이미 작성되어 함께 충족됨.
 
 ### 백엔드 영역 요약
 

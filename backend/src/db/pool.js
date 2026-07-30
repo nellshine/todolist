@@ -3,8 +3,14 @@
  *
  * pg.Pool을 환경변수 기반으로 생성하고, 기동 시 연결 확인용 verifyConnection()을 제공한다.
  */
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const config = require('../config/config');
+
+// DATE 컬럼(OID 1082)은 시각/타임존 정보가 없으므로, pg가 기본으로 변환하는
+// "로컬 자정 Date 객체" 대신 원본 문자열('YYYY-MM-DD')을 그대로 반환하도록 한다.
+// (로컬 자정 Date로 변환하면 UTC 대비 타임존 오프셋만큼 날짜가 하루 밀려 보이는
+// 문제가 있어, start_date/end_date 비교·직렬화 전반에 영향을 준다.)
+types.setTypeParser(1082, (value) => value);
 
 const pool = new Pool({
   connectionString: config.postgresConnectionString,

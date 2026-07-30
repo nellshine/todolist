@@ -9,6 +9,10 @@ const { verifyConnection } = require('./db/pool');
 const requestLogger = require('./middlewares/request-logger');
 const errorHandler = require('./middlewares/error-handler');
 const healthRoutes = require('./routes/health-routes');
+const authRoutes = require('./routes/auth-routes');
+const userRoutes = require('./routes/user-routes');
+const categoryRoutes = require('./routes/category-routes');
+const todoRoutes = require('./routes/todo-routes');
 
 function createApp() {
   const app = express();
@@ -17,6 +21,10 @@ function createApp() {
   app.use(requestLogger);
 
   app.use(healthRoutes);
+  app.use(authRoutes);
+  app.use(userRoutes);
+  app.use(categoryRoutes);
+  app.use(todoRoutes);
 
   app.use(errorHandler);
 
