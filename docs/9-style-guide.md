@@ -93,6 +93,13 @@
 | `--font-heading` | 16px / 24px | 700 | 할일 카드 제목, 섹션 헤딩 |
 | `--font-body` | 14px / 20px | 400 | 기본 본문, 입력 필드 텍스트 |
 | `--font-caption` | 12px / 16px | 400 | 날짜, 보조 설명, 배지 텍스트 |
+
+> 구현 참고: `frontend/src/index.css`의 전역 `:root`에는 `--font-family-base`만 CSS 커스텀 프로퍼티로
+> 선언돼 있고, 위 크기/굵기 스케일은 별도의 `--font-title`/`--font-heading`/... 변수로 선언되지 않은 채
+> 각 컴포넌트 CSS(`TodoCard.css`, `AuthForm.css`, `TodoListPage.css` 등)에 이 표와 동일한 값
+> (예: 20px/700, 16px/700, 14px/400, 12px/400)이 직접 하드코딩되어 있다. 값 자체는 이 스케일과
+> 어긋나지 않으나, 토큰화(변수 승격)는 아직 이뤄지지 않았다 — 향후 리팩터링 시 참고할 것(YAGNI 원칙상
+> 지금 강제하지는 않는다).
 | `--font-button` | 14px / 20px | 600 | 버튼 라벨 |
 
 ## 4. 간격/레이아웃

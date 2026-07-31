@@ -310,12 +310,14 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: 없음 (최초 착수, 백엔드 서버 구동과 무관하게 착수 가능)
 
-**완료 조건**
-- [ ] 개발 서버가 정상 기동하고 빈 페이지가 렌더링된다.
-- [ ] 8개 디렉토리가 모두 생성되어 있다.
-- [ ] Zustand 스토어와 `QueryClientProvider`가 콘솔 에러 없이 로드된다.
-- [ ] 데스크톱/모바일(약 375px) 양쪽에서 공통 레이아웃이 가로 스크롤 없이 표시된다.
-- [ ] 라우팅 골격에서 페이지 전환이 정상 동작한다.
+**완료 조건** (검증: `npm run test:coverage` 5개 파일 11/11 통과, 커버리지 Statements/Branches/Functions/Lines 100%; `npm run build` 타입 에러 없이 성공; Playwright 헤드리스로 375px/1280px 두 뷰포트에서 `scrollWidth <= clientWidth` 확인 및 콘솔 에러 0건 확인)
+- [x] 개발 서버가 정상 기동하고 빈 페이지가 렌더링된다 (`npm run dev` → `http://localhost:5173/`, `curl` 200 확인; `/`는 `/login`으로 리다이렉트되어 "로그인 화면" 자리표시자 렌더링).
+- [x] 8개 디렉토리가 모두 생성되어 있다 (`frontend/src/{components,pages,store,queries,api,types,constants,utils}`; `api`/`types`/`utils`는 FE-2 범위라 `.gitkeep`만 배치).
+- [x] Zustand 스토어와 `QueryClientProvider`가 콘솔 에러 없이 로드된다 (`store/authStore.ts`, `queries/queryClient.ts`; Playwright로 페이지 로드 시 `console`/`pageerror` 이벤트 0건 확인, 단위 테스트로도 초기값/액션 검증).
+- [x] 데스크톱/모바일(약 375px) 양쪽에서 공통 레이아웃이 가로 스크롤 없이 표시된다 (`components/Layout.tsx`, 전역 `box-sizing:border-box` + 고정 `min-width` 미사용; 375×667·1280×800 두 뷰포트 모두 `scrollWidth<=clientWidth` true 확인).
+- [x] 라우팅 골격에서 페이지 전환이 정상 동작한다 (react-router-dom, `/login`·`/signup`·`/todos` 각각 고유 자리표시자 텍스트 렌더링 확인, `/` 접근 시 `/login` 리다이렉트 확인).
+
+구현 중 조정한 사항: `npm create vite@latest`의 대화형 프롬프트가 비대화 환경에서 동작하지 않아 `create-vite ... --no-interactive`로 대체했고, 이 과정에서 기존 `frontend/CLAUDE.md`가 삭제되어 원문 그대로 복원했다. React/React DOM은 스캐폴드 시점에 이미 19.x가 설치되어 별도 업그레이드가 불필요했다. 테스트는 Vite 네이티브 통합(Jest 대비 설정 중복 없음)을 근거로 Vitest+React Testing Library를 채택했다.
 
 ### FE-2. API 클라이언트 레이어 구축
 
@@ -324,12 +326,14 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: FE-1 완료. 백엔드 API 엔드포인트/요청·응답 스키마(BE-2 이후) 확정 필요(Mock으로 우선 착수 가능)
 
-**완료 조건**
-- [ ] fetch 래퍼가 토큰을 `Authorization` 헤더에 자동 첨부한다.
-- [ ] 401/404/400 에러가 일관된 형태로 파싱된다.
-- [ ] 타입 정의가 도메인 정의서 3장 속성과 1:1 매핑된다.
-- [ ] 상태 상수/기본 카테고리명이 `constants/`에 정의되어 매직 문자열이 없다.
-- [ ] 백엔드(또는 Mock) 대상 헬스체크 API 호출이 정상 수신된다.
+**완료 조건** (검증: `npm run test:coverage` 11개 파일 28/28 통과, Statements/Branches/Functions/Lines 100%; `npm run build` 타입 에러 없이 성공; 실행 중인 백엔드(`localhost:3000`) 대상으로 `vite-node`를 통해 `getHealth()`를 실제 네트워크 호출로 검증)
+- [x] fetch 래퍼가 토큰을 `Authorization` 헤더에 자동 첨부한다 (`api/fetch-client.ts`, `api/token-storage.ts`; 토큰 유무에 따른 헤더 첨부/미첨부 단위 테스트로 확인).
+- [x] 401/404/400 에러가 일관된 형태로 파싱된다 (`api/api-error.ts`의 `ApiError{status,code,message,details}`로 통일; 세 상태코드 각각 단위 테스트로 확인).
+- [x] 타입 정의가 도메인 정의서 3장 속성과 1:1 매핑된다 (`types/user.ts`, `types/category.ts`, `types/todo.ts`가 swagger.json 스키마 필드명 그대로 camelCase로 매핑).
+- [x] 상태 상수/기본 카테고리명이 `constants/`에 정의되어 매직 문자열이 없다 (`constants/todo-status.ts`, `constants/category.ts`).
+- [x] 백엔드 대상 헬스체크 API 호출이 정상 수신된다 (`api/health-api.ts`의 `getHealth()`를 `vite-node`로 직접 실행해 실제 구동 중인 백엔드로부터 `{"status":"ok"}` 응답 확인, mock 아님).
+
+구현 중 조정한 사항: 레이어 역방향 의존 금지 원칙(`project-structure.md` 2.1절)에 따라 `store/authStore.ts`가 토큰 영속화를 위해 `api/token-storage.ts`를 참조하도록 하고(`store → api` 단방향), api 레이어는 Zustand store를 import하지 않도록 했다. `POST /auth/signup`의 실제 응답 스키마가 swagger 상 `AuthResponse`가 아닌 `User`이므로(로그인만 토큰 발급), `auth-api.ts`의 `signup()` 반환 타입을 swagger 명세에 맞춰 `Promise<User>`로 작성했다.
 
 ### FE-3. 회원가입/로그인 화면
 
@@ -337,12 +341,14 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: FE-1, FE-2 완료. 백엔드 회원가입/로그인 API(BE-2) 준비 필요
 
-**완료 조건**
-- [ ] 정상 회원가입 후 로그인 화면으로 이동한다.
-- [ ] 이메일 중복 시 에러 메시지가 표시되고 이동하지 않는다.
-- [ ] 올바른 로그인 시 토큰 저장 후 목록 화면 진입, 틀린 자격증명은 에러 표시된다.
-- [ ] 모바일(약 375px)에서 폼이 가로 스크롤 없이 조작 가능하다.
-- [ ] 미로그인 상태로 보호 페이지 접근 시 로그인 화면으로 리다이렉트된다.
+**완료 조건** (검증: `npm run test:coverage` 15개 파일 42/42 통과, Statements/Branches/Functions/Lines 100%; `npm run build` 타입 에러 없이 성공; 실제 구동 중인 백엔드(`localhost:3000`)를 대상으로 Playwright 헤드리스로 실통합 확인, 375×667 뷰포트 콘솔 에러 0건)
+- [x] 정상 회원가입 후 로그인 화면으로 이동한다 (`pages/SignupPage.tsx`; Playwright로 실제 `POST /auth/signup` 호출 후 `/login` 이동 확인, 테스트 이메일 `fe3test<timestamp>@example.com`).
+- [x] 이메일 중복 시 에러 메시지가 표시되고 이동하지 않는다 (동일 이메일 재가입 시 "이미 가입된 이메일입니다." 노출, 화면 유지 확인).
+- [x] 올바른 로그인 시 토큰 저장 후 목록 화면 진입, 틀린 자격증명은 에러 표시된다 (로그인 성공 시 `/todos` 이동 및 `localStorage`에 `todolist_token` 저장 확인; 틀린 비밀번호 시 "이메일 또는 비밀번호가 일치하지 않습니다." 노출 확인).
+- [x] 모바일(약 375px)에서 폼이 가로 스크롤 없이 조작 가능하다 (375×667 뷰포트에서 `/login`, `/signup` 각각 `scrollWidth<=clientWidth` 확인).
+- [x] 미로그인 상태로 보호 페이지 접근 시 로그인 화면으로 리다이렉트된다 (`components/ProtectedRoute.tsx`; 새 브라우저 컨텍스트로 `/todos` 직접 접근 시 `/login`으로 리다이렉트 확인).
+
+구현 중 조정한 사항: FR-14(폼 인라인 유효성 검증)는 FE-9(Should) 범위이므로 이번 Task에서는 HTML5 기본 검증(`required`/`type`/`minLength`)만 적용하고, 서버 에러(이메일 중복/자격증명 오류)만 화면에 표시했다. `useMutation`의 `mutationFn`이 두 번째 인자로 컨텍스트 객체를 함께 전달하므로 관련 단위 테스트의 `toHaveBeenCalledWith` 검증에 `expect.anything()`을 추가했다.
 
 ### FE-4. 할일 등록/수정 폼 (캘린더 기반 기간 선택)
 
@@ -351,13 +357,15 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: FE-2, FE-3 완료. 백엔드 할일 등록/수정 API(BE-5), 카테고리 목록 API(BE-4) 준비 필요
 
-**완료 조건**
-- [ ] 카테고리 미지정 등록도 성공하고 '기본' 카테고리로 노출된다.
-- [ ] 종료일<시작일 선택 시 등록 전 에러가 표시된다.
-- [ ] 캘린더로 날짜 선택이 정상 반영된다.
-- [ ] 완료 처리 토글 저장 시 목록에 완료 상태로 반영된다.
-- [ ] 등록/수정 성공 시 새로고침 없이 목록에 최신 데이터가 반영된다.
-- [ ] 모바일(약 375px)에서 폼 전체가 가로 스크롤 없이 조작 가능하다.
+**완료 조건** (검증: `npm run test:coverage` 22개 파일 66/66 통과, Statements 97.22%/Branches 94.59%/Functions 92.85%/Lines 98.03%; `npm run build` 타입 에러 없이 성공; 실행 중인 백엔드(`localhost:3000`)·프론트(`localhost:5173`) 대상 Playwright 헤드리스로 신규 계정 회원가입→로그인→등록/검증오류/완료토글/수정 전 과정 확인)
+- [x] 카테고리 미지정 등록도 성공하고 '기본' 카테고리로 노출된다 (`TodoForm.tsx`에서 카테고리 미선택 시 `categoryId: undefined`로 요청, 백엔드가 '기본' 카테고리를 적용; Playwright로 등록 후 카드에 "기본" 배지 노출 확인).
+- [x] 종료일<시작일 선택 시 등록 전 에러가 표시된다 (`TodoForm.tsx` 클라이언트 1차 검증, API 호출 전 차단; Playwright 네트워크 탭 기준 `POST /todos` 미발생 확인).
+- [x] 캘린더로 날짜 선택이 정상 반영된다 (`FormField`의 네이티브 `<input type="date">`로 브라우저 기본 캘린더 팝업 제공, 새 패키지 미설치).
+- [x] 완료 처리 토글 저장 시 목록에 완료 상태로 반영된다 (`TodoCard`의 완료 체크박스 → `useUpdateTodo` → `['todos']` invalidate; Playwright로 상태 배지가 "완료"로 즉시 갱신됨 확인).
+- [x] 등록/수정 성공 시 새로고침 없이 목록에 최신 데이터가 반영된다 (`useCreateTodo`/`useUpdateTodo` 성공 시 `queryClient.invalidateQueries({queryKey:['todos']})`로 prefix 무효화).
+- [x] 모바일(약 375px)에서 폼 전체가 가로 스크롤 없이 조작 가능하다 (`Modal.css` 모바일 풀스크린 바텀시트, `box-sizing:border-box`; Playwright 375×667 뷰포트에서 `scrollWidth<=clientWidth` 확인).
+
+구현 중 조정한 사항: 계획에 없던 `Modal` 공용 컴포넌트를 FE-6/FE-7 재사용을 고려해 먼저 분리했다. React Query v5의 `mutationFn`은 두 번째 인자로 컨텍스트 객체를 함께 전달하므로, `createTodo`를 직접 `mutationFn`으로 사용하는 테스트에서는 `expect.anything()`으로 두 번째 인자를 허용했다. 기존 FE-1 단계에서 작성된 `App.test.tsx`의 `/todos` 진입 테스트가 이번 교체로 사라진 자리표시자 텍스트("할일 목록 화면")를 참조하고 있어, 실제 `TodoListPage` 제목("할일 목록")을 확인하도록 갱신했다.
 
 ### FE-5. 할일 목록 화면 + 카테고리/상태 필터 UI
 
@@ -365,13 +373,15 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: FE-2, FE-3 완료(FE-4와 병행 가능). 백엔드 목록 조회 API(BE-6, 필터 쿼리 파라미터 지원) 준비 필요
 
-**완료 조건**
-- [ ] 필터 미지정 시 전체 목록이 노출된다.
-- [ ] 카테고리+상태 동시 선택 시 AND 조건 결과만 노출된다.
-- [ ] 상태 4종 각각 단독 필터링이 정확히 동작한다.
-- [ ] 필터 해제 시 전체 목록으로 복원된다.
-- [ ] 필터값(Zustand)과 목록 데이터(TanStack Query)가 분리 저장되어 있다.
-- [ ] 모바일(약 375px)에서 필터/목록이 가로 스크롤 없이 동작한다.
+**완료 조건** (검증: `npm run test:coverage` 24개 파일 79/79 통과, Statements 97.67%/Branches 95.65%/Functions 94.73%/Lines 98.36%; `npm run build` 타입 에러 없이 성공; 실행 중인 백엔드(`localhost:3000`)·프론트(`localhost:5173`) 대상 Playwright로 카테고리 2개+할일 3건(A:업무/미완료, B:업무/완료, C:개인/완료) 구성 후 필터 조합 실통합 확인)
+- [x] 필터 미지정 시 전체 목록이 노출된다 (초기 렌더 시 3건 전체 노출 확인).
+- [x] 카테고리+상태 동시 선택 시 AND 조건 결과만 노출된다 ("업무"+"완료" 동시 선택 시 교집합인 B 1건만 노출 확인).
+- [x] 상태 4종 각각 단독 필터링이 정확히 동작한다 (`TodoFilter.tsx` 토글 버튼 4종+select, "완료" 단독 선택 시 B·C 2건 노출로 확인; 나머지 3종은 `TodoFilter.test.tsx` mock 테스트로 파라미터 전달 검증).
+- [x] 필터 해제 시 전체 목록으로 복원된다 (카테고리/상태 각각 "전체" 재선택 시 3건 전체 복원 확인).
+- [x] 필터값(Zustand)과 목록 데이터(TanStack Query)가 분리 저장되어 있다 (`store/todoFilterStore.ts`는 `{categoryId, status}` 선택값만 보관, `queries/useTodos.ts`가 `queryKey`에 params를 포함해 서버 데이터만 캐싱 — 서버 상태 중복 저장 없음).
+- [x] 모바일(약 375px)에서 필터/목록이 가로 스크롤 없이 동작한다 (375×667 뷰포트에서 모바일 select 노출·데스크톱 라디오/토글 숨김, `scrollWidth<=clientWidth`, 콘솔 에러 0건 확인; 1280px에서는 반대로 데스크톱 컨트롤만 노출 확인).
+
+구현 중 조정한 사항: `TodoCard.tsx`에 하드코딩돼 있던 상태 라벨(`STATUS_LABEL`)을 `constants/todo-status-label.ts`로 분리해 `TodoFilter.tsx`와 공유하도록 이관했다(매직 문자열 중복 제거). "전체(필터 없음)"는 빈 문자열 대신 `null`로 통일해 실제 UUID 값과의 혼동을 방지했다.
 
 ### FE-6. 카테고리 관리 UI (생성/수정/삭제)
 
@@ -379,12 +389,14 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: FE-2, FE-3 완료(FE-4/FE-5와 카테고리 목록 쿼리 공유, 병행 가능). 백엔드 카테고리 CRUD API(BE-4) 준비 필요
 
-**완료 조건**
-- [ ] 생성 직후 목록/필터에 즉시 노출된다.
-- [ ] 이름 수정이 즉시 반영된다.
-- [ ] 삭제 시 확인 UI가 노출되고 확인 후에만 삭제된다.
-- [ ] 카테고리 삭제 후 소속 할일이 '기본'으로 표시됨을 확인한다.
-- [ ] 카테고리 미생성 신규 계정도 카테고리 미지정 등록이 가능하다.
+**완료 조건** (검증: `npm run test:coverage` 26개 파일 96/96 통과, Statements 97.81%/Branches 95.37%/Functions 96.42%/Lines 98.83%; `npm run build` 타입 에러 없이 성공; 실행 중인 백엔드(`localhost:3000`)·프론트(`localhost:5173`) 대상 Playwright로 카테고리 생성→이름수정→삭제 취소/확정 전 과정 실통합 확인)
+- [x] 생성 직후 목록/필터에 즉시 노출된다 (`useCreateCategory` 성공 시 `['categories']` invalidate; 생성 직후 관리 목록·할일 등록 폼 select 모두에 즉시 노출 확인).
+- [x] 이름 수정이 즉시 반영된다 (`useUpdateCategory`; 이름 변경 후 관리 목록과 기존 할일 카드의 카테고리 배지 모두에 새 이름 반영 확인).
+- [x] 삭제 시 확인 UI가 노출되고 확인 후에만 삭제된다 (`CategoryManager` 내부 state 전환으로 확인 화면 표시, "취소" 클릭 시 삭제 미실행·목록 유지 확인, "삭제" 확정 클릭 시에만 `deleteCategory` 호출 확인).
+- [x] 카테고리 삭제 후 소속 할일이 '기본'으로 표시됨을 확인한다 (`useDeleteCategory` 성공 시 `['categories']`와 `['todos']` 동시 invalidate; 삭제 확정 후 소속 할일 카드가 새로고침 없이 "기본" 배지로 전환됨을 실제 데이터로 확인).
+- [x] 카테고리 미생성 신규 계정도 카테고리 미지정 등록이 가능하다 (FE-4의 `TodoForm` "선택 안 함" 옵션 + BE-2 회원가입 시 '기본' 카테고리 자동 생성으로 이미 충족되어 있음을 회귀 확인, 신규 계정으로 재검증).
+
+'기본' 카테고리는 서버가 400으로 삭제/수정을 거부하지만(BE-4 기검증), UI에서도 수정/삭제 버튼을 노출하지 않고 "기본 카테고리" 배지만 표시해 불필요한 요청 자체를 차단했다. 삭제 확인은 별도 모달을 중첩하지 않고 같은 `Modal` 내부에서 콘텐츠만 전환하는 방식으로 구현했다.
 
 ### FE-7. 할일 삭제 (확인 UX 포함)
 
@@ -392,11 +404,13 @@ Zustand·TanStack Query 초기 설정, PRD 7.4절 브레이크포인트 기준 �
 
 **의존성**: FE-5 완료. 백엔드 삭제 API(BE-5) 준비 필요
 
-**완료 조건**
-- [ ] 삭제 버튼 클릭 시 확인 모달이 노출되고 취소 시 삭제되지 않는다.
-- [ ] 확인 후 삭제 성공 시 목록에서 즉시 사라진다.
-- [ ] 404 응답 시 "항목을 찾을 수 없음" 메시지가 표시되고 크래시하지 않는다.
-- [ ] 모바일(약 375px)에서 삭제/확인 모달이 가로 스크롤 없이 동작한다.
+**완료 조건** (검증: `npm run test:coverage` 27개 파일 106/106 통과, Statements 97.01%/Branches 94.82%/Functions 95.74%/Lines 98.39%; `npm run build` 타입 에러 없이 성공; 실행 중인 백엔드(`localhost:3000`)·프론트(`localhost:5173`) 대상 Playwright로 삭제 취소/확정/404/375px 전 과정 실통합 확인)
+- [x] 삭제 버튼 클릭 시 확인 모달이 노출되고 취소 시 삭제되지 않는다 (`TodoCard`에 삭제 버튼 추가, `DeleteTodoConfirm`을 독립 `Modal`로 오픈, "'{제목}' 할일을 삭제하시겠습니까?" 문구 노출; 취소 클릭 시 `deleteTodo` 미호출·카드 목록 유지 확인).
+- [x] 확인 후 삭제 성공 시 목록에서 즉시 사라진다 (`useDeleteTodo` 성공 시 `['todos']` invalidate; 삭제 확정 후 새로고침 없이 카드가 목록에서 사라짐 확인).
+- [x] 404 응답 시 "항목을 찾을 수 없음" 메시지가 표시되고 크래시하지 않는다 (동일 id에 대해 백엔드에 선행 DELETE(204)를 보낸 뒤 UI에서 삭제 확정 → 실제로 404/`TODO_NOT_FOUND` 수신, 모달에 "할일을 찾을 수 없습니다." 에러 메시지 노출, 페이지는 정상 동작 유지(모달 닫기·할일 추가 버튼 등 이어서 조작 가능) 확인).
+- [x] 모바일(약 375px)에서 삭제/확인 모달이 가로 스크롤 없이 동작한다 (`Modal.css`의 기존 모바일 풀스크린 바텀시트를 그대로 상속, 별도 CSS 불필요; 375×667 뷰포트에서 `scrollWidth<=clientWidth` 및 삭제 버튼이 뷰포트 내에 있음을 확인, 콘솔 에러 0건).
+
+구현 중 조정한 사항: 카테고리 삭제(FE-6)는 같은 `Modal` 내부에서 콘텐츠를 전환하는 방식이었지만, 할일은 목록에 여러 카드가 나열돼 있어 카드 자리에서 확인 화면으로 전환하는 것이 부자연스러우므로 이번엔 독립적인 `Modal`을 새로 열어 `DeleteTodoConfirm`을 렌더링하는 방식으로 설계했다(와이어프레임 S6이 별도 화면 상태로 정의된 것과도 일치).
 
 ### FE-8. 계정 정보 수정 화면 (Should)
 

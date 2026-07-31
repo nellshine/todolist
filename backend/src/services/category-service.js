@@ -42,6 +42,7 @@ async function listCategories(ownerId) {
 async function createCategory({ ownerId, name }) {
   try {
     const category = await categoryRepository.createCategory({ ownerId, name });
+    console.log(`[category] 생성: ownerId=${ownerId} id=${category.id} name=${category.name}`);
     return toCategoryResponse(category);
   } catch (error) {
     if (error.code === UNIQUE_VIOLATION_CODE) {

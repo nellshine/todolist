@@ -173,13 +173,14 @@
       },
       "Error": {
         "type": "object",
-        "description": "공통 에러 응답 포맷.",
+        "description": "공통 에러 응답 포맷. 실제 응답 바디는 항상 code/message 두 필드만 포함한다.\n\n실제 사용되는 code 값: MISSING_REQUIRED_FIELD, INVALID_PASSWORD, INVALID_NICKNAME, EMAIL_ALREADY_EXISTS, INVALID_CREDENTIALS, USER_NOT_FOUND, UNAUTHORIZED, CATEGORY_NOT_FOUND, CATEGORY_NAME_ALREADY_EXISTS, DEFAULT_CATEGORY_DELETE_FORBIDDEN, TODO_NOT_FOUND, INVALID_DATE_RANGE, INVALID_STATUS, EMPTY_UPDATE_PAYLOAD, INVALID_JSON_BODY, INTERNAL_SERVER_ERROR.",
         "properties": {
-          "code": { "type": "string", "example": "VALIDATION_ERROR" },
+          "code": { "type": "string", "example": "INVALID_DATE_RANGE" },
           "message": { "type": "string", "example": "종료일자는 시작일자보다 이전일 수 없습니다." },
           "details": {
             "type": "array",
             "nullable": true,
+            "description": "예약 필드. 현재 버전의 백엔드 구현은 이 필드를 채우지 않으며 응답에 포함되지 않는다(항상 부재).",
             "items": {
               "type": "object",
               "properties": {
@@ -194,7 +195,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "요청 값 유효성 오류 (예: startDate > endDate, 필수값 누락 등, 도메인 규칙 3, FR-7/FR-14).",
+        "description": "요청 값 유효성 오류 (예: startDate > endDate, 필수값 누락 등, 도메인 규칙 3, FR-7/FR-14). 요청 바디 자체가 유효한 JSON이 아닌 경우에도 공통적으로 code=INVALID_JSON_BODY로 400이 반환된다(모든 엔드포인트에 공통 적용, 개별 엔드포인트별로 별도 기재하지 않음).",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
       "Unauthorized": {
@@ -386,7 +387,7 @@
       "get": {
         "tags": ["Todos"],
         "summary": "할일 목록 조회",
-        "description": "인증된 사용자 소유의 할일 목록을 조회한다 (UC-5, FR-8, 도메인 7장). categoryId와 status 쿼리 파라미터는 AND 조건으로 동시 적용 가능하며(도메인 2장 필터 정의), 지정하지 않으면 사용자 소유의 모든 할일을 반환한다. status는 저장값이 아닌 파생값(4장) 기준으로 필터링된다.",
+        "description": "인증된 사용자 소유의 할일 목록을 조회한다 (UC-5, FR-8, 도메인 7장). categoryId와 status 쿼리 파라미터는 AND 조건으로 동시 적용 가능하며(도메인 2장 필터 정의), 지정하지 않으면 사용자 소유의 모든 할일을 반환한다. status는 저장값이 아닌 파생값(4장) 기준으로 필터링된다.\n\n주의(비대칭 동작): categoryId에 본인 소유가 아니거나 존재하지 않는 값을 넘겨도 404가 아니라 빈 배열이 200으로 반환된다(owner_id 조건에 의해 자연히 필터링됨). 이는 POST /todos에서 유효하지 않은 categoryId를 404로 거부하는 것과는 다른 동작이다.",
         "parameters": [
           {
             "name": "categoryId",
@@ -463,7 +464,7 @@
       "patch": {
         "tags": ["Todos"],
         "summary": "할일 수정",
-        "description": "제목/카테고리/기간/완료 여부(완료 처리/취소 포함)를 수정한다 (FR-9, UC-6). 소유자 본인의 수정만 반영되며, 타 계정 소유 할일 ID로 수정 시도 시 404가 반환된다 (도메인 규칙 4). startDate/endDate 변경 시에도 startDate <= endDate 규칙이 적용되며 위반 시 400이다 (도메인 규칙 3). isCompleted를 true로 변경하면 completedAt이 기록되고 상태는 종료일자 경과 여부와 무관하게 COMPLETED로 계산된다 (도메인 규칙 6).",
+        "description": "제목/카테고리/기간/완료 여부(완료 처리/취소 포함)를 수정한다 (FR-9, UC-6). 소유자 본인의 수정만 반영되며, 타 계정 소유 할일 ID로 수정 시도 시 404가 반환된다 (도메인 규칙 4). startDate/endDate 변경 시에도 startDate <= endDate 규칙이 적용되며 위반 시 400이다 (도메인 규칙 3). isCompleted를 true로 변경하면 completedAt이 기록되고 상태는 종료일자 경과 여부와 무관하게 COMPLETED로 계산된다 (도메인 규칙 6). 요청 바디가 빈 객체({})이면 code=EMPTY_UPDATE_PAYLOAD로 400이 반환된다.",
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTodoRequest" } } }

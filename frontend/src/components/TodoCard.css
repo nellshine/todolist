@@ -1,0 +1,104 @@
+.todo-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.todo-card--overdue {
+  border-left: 4px solid var(--color-error);
+}
+
+.todo-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.todo-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.todo-card__category {
+  align-self: flex-start;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.todo-card__period {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.todo-card__status {
+  align-self: flex-start;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.todo-card__status--not_started {
+  background: var(--status-not-started-bg);
+  color: var(--status-not-started-text);
+}
+
+.todo-card__status--in_progress {
+  background: var(--status-in-progress-bg);
+  color: var(--status-in-progress-text);
+}
+
+.todo-card__status--completed {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-text);
+}
+
+.todo-card__status--overdue {
+  background: var(--status-overdue-bg);
+  color: var(--status-overdue-text);
+}
+
+.todo-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.todo-card__edit {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.todo-card__delete {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-error);
+  background: var(--color-bg);
+  color: var(--color-error);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
